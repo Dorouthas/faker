@@ -26,20 +26,19 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import net.java.faker.Proxy;
+import net.java.faker.proxy.PacketRegistry;
 import net.java.faker.proxy.auth.ExternalInterface;
 import net.java.faker.proxy.packet.S2CAbstractRequest;
 import net.java.faker.proxy.packethandler.PacketHandler;
 import net.java.faker.proxy.session.DualConnection;
 import net.java.faker.proxy.session.ProxyConnection;
 import net.java.faker.proxy.util.ExceptionUtil;
+import net.java.faker.proxy.util.PacketLogger;
 import net.java.faker.proxy.util.PacketUtils;
 import net.java.faker.proxy.util.TransferDataHolder;
 import net.java.faker.proxy.util.chat.ChatSession1_19_3;
 import net.java.faker.util.logging.Logger;
-import net.raphimc.netminecraft.constants.ConnectionState;
-import net.raphimc.netminecraft.constants.MCPackets;
-import net.raphimc.netminecraft.constants.MCPipeline;
-import net.raphimc.netminecraft.constants.MCVersion;
+import net.raphimc.netminecraft.constants.*;
 import net.raphimc.netminecraft.netty.crypto.AESEncryption;
 import net.raphimc.netminecraft.netty.crypto.CryptUtil;
 import net.raphimc.netminecraft.packet.Packet;
@@ -97,6 +96,7 @@ public class Proxy2ServerHandler extends SimpleChannelInboundHandler<Packet> {
             this.proxyConnection.getC2P().close();
         } catch (Throwable ignored) {
         }
+        PacketLogger.stop();
     }
 
     @Override
@@ -130,13 +130,13 @@ public class Proxy2ServerHandler extends SimpleChannelInboundHandler<Packet> {
         }
 
 
-//        if (packet instanceof UnknownPacket p) {
-//            PacketRegistry reg = (PacketRegistry) ctx.channel().attr(MCPipeline.PACKET_REGISTRY_ATTRIBUTE_KEY).get();
-//            final MCPackets packetType = MCPackets.getPacket(reg.getConnectionState(), PacketDirection.CLIENTBOUND, reg.getProtocolVersion(), p.packetId);
-//            Logger.raw("IN  " + "Unknown " + p.packetId + " " + packetType);
-//        } else  {
-//            Logger.raw("IN  " + PacketUtils.toString(packet));
-//        }
+        if (packet instanceof UnknownPacket p) {
+            PacketRegistry reg = (PacketRegistry) ctx.channel().attr(MCPipeline.PACKET_REGISTRY_ATTRIBUTE_KEY).get();
+            final MCPackets packetType = MCPackets.getPacket(reg.getConnectionState(), PacketDirection.CLIENTBOUND, reg.getProtocolVersion(), p.packetId);
+            PacketLogger.logIn("Unknown " + p.packetId + " " + packetType);
+        } else  {
+            PacketLogger.logIn(PacketUtils.toString(packet));
+        }
 
         if (!handleCompression(packet, ctx.channel())) {
             return;

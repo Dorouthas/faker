@@ -50,6 +50,7 @@ public class AdvancedTab extends UITab {
     JCheckBox allowDirectConnection;
     JCheckBox autoLatency;
     JCheckBox newPingCorrection;
+    JCheckBox logPackets;
     NetworkAdapterComboBox networkAdapters;
     JTextField proxy;
 
@@ -228,7 +229,13 @@ public class AdvancedTab extends UITab {
             this.newPingCorrection.setSelected(Proxy.getConfig().newPingCorrection.get());
             checkboxes.add(this.newPingCorrection);
         }
-
+        {
+            this.logPackets = new JCheckBox();
+            I18n.link(logPackets, "tab.advanced.log_packets.label");
+            I18n.linkTooltip(logPackets, "tab.advanced.log_packets.tooltip");
+            this.logPackets.setSelected(Proxy.getConfig().logPackets.get());
+            checkboxes.add(this.logPackets);
+        }
         {
             //just empty
             checkboxes.add(Box.createHorizontalBox());
@@ -292,6 +299,7 @@ public class AdvancedTab extends UITab {
             Proxy.getConfig().allowDirectConnection.set(this.allowDirectConnection.isSelected());
             Proxy.getConfig().autoLatency.set(this.autoLatency.isSelected());
             Proxy.getConfig().newPingCorrection.set(this.newPingCorrection.isSelected());
+            Proxy.getConfig().logPackets.set(this.logPackets.isSelected());
             if (this.networkAdapters.getSelectedItem() == NetworkInterface.NULL) {
                 Proxy.getConfig().targetAdapter.set("null");
             } else if (this.networkAdapters.getSelectedItem() instanceof NetworkInterface ni) {

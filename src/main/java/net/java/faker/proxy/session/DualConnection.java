@@ -28,6 +28,7 @@ import net.java.faker.proxy.packet.keepalive.*;
 import net.java.faker.proxy.packet.pingpong.*;
 import net.java.faker.proxy.util.ChannelUtil;
 import net.java.faker.proxy.util.LatencyMode;
+import net.java.faker.proxy.util.PacketLogger;
 import net.java.faker.proxy.util.chat.ChatSession1_19_3;
 import net.java.faker.util.logging.Logger;
 import net.raphimc.netminecraft.constants.ConnectionState;
@@ -72,7 +73,7 @@ public class DualConnection {
     private int avgLatency;
     private int minLatency = Integer.MAX_VALUE;
     final ArrayList<Pong> pongs = new ArrayList<>();
-//    final ArrayList<Teleport> teleports = new ArrayList<>();
+    //    final ArrayList<Teleport> teleports = new ArrayList<>();
     int nextPongNum;
     int nextKeepAliveNum;
     int nextTeleportNum;
@@ -159,6 +160,7 @@ public class DualConnection {
     }
 
     public synchronized void swapController() {
+        PacketLogger.log("PRE SWAP");
         this.firstSwap = false;
         synchronized (controllerLocker) {
             ProxyConnection follower = this.getFollower0();
@@ -237,6 +239,7 @@ public class DualConnection {
             controller.isController = false;
             Proxy.event(new SwapEvent(follower));
         }
+        PacketLogger.log("POST SWAP");
     }
 
 
@@ -496,12 +499,14 @@ public class DualConnection {
             int newLatency = 0;
             int count = 0;
             int lastTtl = 0;
+            long latencyReader = WinRedirect.createLatencyReader(null, fromPort, toIp, toPort);
+            long ttlReader = WinRedirect.createTtlReader(toIp, toPort, null, fromPort);
             while (!isInterrupted()) {
                 if (!channel.isOpen()) {
                     break;
                 }
-                if (count % 4 == 0) {
-                    ttl = WinRedirect.getTtl(toIp, toPort, null, fromPort);
+                if (count % 4 == 0 && ttlReader != 0) {
+                    ttl = WinRedirect.getTtl(ttlReader);
                     if (Proxy.getConfig().tracerouteFix.get()) {
                         if (lastTtl != ttl) {
                             WinRedirect.setTtlOverride(Proxy.forward_redirect, ttl - 1);
@@ -546,16 +551,18 @@ public class DualConnection {
                         }
                     }
                 }
-
-                int latency = WinRedirect.getLatency(null, fromPort, toIp, toPort);
-                if (latency < getConnectTime() * 3 && latency > 2) {
-                    latencySum += latency;
-                    latencyCount++;
-                    avgLatency = latencySum / latencyCount;
-                    if (latency < minLatency) {
-                        minLatency = latency;
+                if (latencyReader != 0) {
+                    int latency = WinRedirect.getLatency(latencyReader);
+                    if (latency < getConnectTime() * 3 && latency > 2) {
+                        latencySum += latency;
+                        latencyCount++;
+                        avgLatency = latencySum / latencyCount;
+                        if (latency < minLatency) {
+                            minLatency = latency;
+                        }
                     }
                 }
+
                 newLatency = (minLatency + avgLatency) / 2;
                 if (mainConnection.getLatencyMode() == LatencyMode.AUTO) {
                     mainConnection.setLatency(newLatency);
@@ -576,7 +583,12 @@ public class DualConnection {
                 }
                 count++;
             }
-
+            if (latencyReader != 0) {
+                WinRedirect.destroyLatencyReader(latencyReader);
+            }
+            if (ttlReader != 0) {
+                WinRedirect.destroyTtlReader(ttlReader);
+            }
         }
     }
 }

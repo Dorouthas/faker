@@ -27,6 +27,7 @@ import net.java.faker.proxy.packet.pingpong.C2SPong;
 import net.java.faker.proxy.packet.pingpong.C2SWindowConfirmation;
 import net.java.faker.proxy.packet.pingpong.S2CPing;
 import net.java.faker.proxy.packet.pingpong.S2CWindowConfirmation;
+import net.java.faker.proxy.session.DualConnection;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.constants.MCVersion;
 import net.raphimc.netminecraft.packet.registry.DefaultPacketRegistry;
@@ -47,14 +48,13 @@ public class PacketRegistry extends DefaultPacketRegistry {
             registerPacket(MCPackets.S2C_CONFIG_COOKIE_REQUEST, S2CCookieRequest.Config::new);
             registerPacket(MCPackets.C2S_CONFIG_COOKIE_RESPONSE, C2SCookieResponse.Config::new);
         }
-
         registerPacket(MCPackets.C2S_MOVE_PLAYER_STATUS_ONLY, C2SMovePlayer.Status::new);
         registerPacket(MCPackets.C2S_MOVE_PLAYER_ROT, C2SMovePlayer.Rot::new);
         registerPacket(MCPackets.C2S_MOVE_PLAYER_POS, C2SMovePlayer.Pos::new);
         registerPacket(MCPackets.C2S_MOVE_PLAYER_POS_ROT, C2SMovePlayer.PosRot::new);
         registerPacket(MCPackets.C2S_SET_CARRIED_ITEM, C2SSetCarriedItem::new);
         registerPacket(MCPackets.C2S_PLAYER_COMMAND, C2SPlayerCommand::new);
-        registerPacket(MCPackets.S2C_SET_ENTITY_MOTION, S2CSetEntityMotion::new);
+//        registerPacket(MCPackets.S2C_SET_ENTITY_MOTION, S2CSetEntityMotion::new);
         registerPacket(MCPackets.C2S_SWING, C2SSwing::new);
         registerPacket(MCPackets.S2C_ANIMATE, S2CAnimate::new);
         if (protocolVersion < MCVersion.v1_17) {

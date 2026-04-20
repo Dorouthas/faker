@@ -232,6 +232,21 @@ typedef struct
 	HANDLE thread_in;
 } BLOCK_IP, * PBLOCK_IP;
 
+typedef struct
+{
+	HANDLE windivert;
+	INT32 latency;
+	HANDLE thread_in;
+	char* packet;
+} LATENCY_READER, * PLATENCY_READER;
+
+typedef struct
+{
+	HANDLE windivert;
+	INT32 latency;
+	HANDLE thread_in;
+	char* packet;
+} TTL_READER, * PTTL_READER;
 
 static void message(FILE* const f, const char* msg, ...)
 {
@@ -1431,17 +1446,17 @@ __declspec(dllexport) int redirect_get_latency(PREDIRECT r, char* ip, UINT16 por
 	return -1;
 }
 
-DWORD WINAPI getTtl_thread(LPVOID lpParam)
+DWORD WINAPI ttl_read_thread(LPVOID lpParam)
 {
-	HANDLE handle = (HANDLE)lpParam;
-	unsigned char* packet = malloc(MAXBUF);
+	PTTL_READER reader = (PTTL_READER)lpParam;
+	unsigned char* packet = reader->packet;
+	HANDLE handle = reader->windivert;
 	UINT packet_len;
 	WINDIVERT_ADDRESS addr;
 	PWINDIVERT_IPHDR ip_header;
 	PWINDIVERT_TCPHDR tcp_header;
 	UINT32 look_seq = 0;
 	UINT64 time = 0;
-	DWORD result = 0xFFFFFFFF;
 	while (TRUE)
 	{
 		if (!WinDivertRecv(handle, packet, MAXBUF, &packet_len, &addr))
@@ -1461,14 +1476,21 @@ DWORD WINAPI getTtl_thread(LPVOID lpParam)
 			warning("[C] failed to parse packet (%d)", GetLastError());
 			continue;
 		}
-		result = ip_header->TTL;
-		break;
+		reader->latency = ip_header->TTL;
 	}
-	free(packet);
-	return result;
+	WinDivertShutdown(handle, WINDIVERT_SHUTDOWN_BOTH);
+	WinDivertClose(handle);
+	free(reader->packet);
+	CloseHandle(reader->thread_in);
+	free(reader);
+	return 0;
 }
 
-__declspec(dllexport) int get_connection_ttl(char* fromIp, UINT16 fromPort, char* toIp, UINT16 toPort) {
+__declspec(dllexport) PTTL_READER createTtlReader(char* fromIp, UINT16 fromPort, char* toIp, UINT16 toPort) {
+	PTTL_READER reader = calloc(1, sizeof(TTL_READER));
+	if (reader == 0) {
+		return 0;
+	}
 	char filter[256];
 	if (toIp == 0) {
 		snprintf(filter, sizeof(filter), "(tcp.DstPort == %d and ip.SrcAddr == %s and tcp.SrcPort == %d)", toPort, fromIp, fromPort);
@@ -1482,23 +1504,58 @@ __declspec(dllexport) int get_connection_ttl(char* fromIp, UINT16 fromPort, char
 	if (handle == 0 || handle == INVALID_HANDLE_VALUE) {
 		return -1;
 	}
-	INT32 result = -1;
+	reader->windivert = handle;
 
-	HANDLE thread = CreateThread(NULL, 100 * 1024, getTtl_thread, handle, 0, 0);
+	unsigned char* packet = malloc(MAXBUF);
+	if (packet == 0) {
+		goto err;
+	}
+	reader->packet = packet;
+
+	HANDLE thread = CreateThread(NULL, 100 * 1024, ttl_read_thread, reader, 0, 0);
 	if (thread == 0) {
 		return -1;
 	}
-	WaitForSingleObject(thread, 1200);
-	WinDivertShutdown(handle, WINDIVERT_SHUTDOWN_BOTH);
-	WaitForSingleObject(thread, INFINITE);
-	WinDivertClose(handle);
-	DWORD exitCode = 0;
-	if (GetExitCodeThread(thread, &exitCode)) {
-		result = exitCode;
+	reader->thread_in = thread;
+	return reader;
+
+err:
+
+	if (reader->windivert != 0) {
+		WinDivertShutdown(reader->windivert, WINDIVERT_SHUTDOWN_BOTH);
+		WinDivertClose(reader->windivert);
+		reader->windivert = 0;
 	}
-	CloseHandle(thread);
-	return result;
+	if (reader->packet != 0) {
+		free(reader->packet);
+		reader->packet = 0;
+	}
+	if (reader->thread_in != 0) {
+		CloseHandle(reader->thread_in);
+		reader->thread_in = 0;
+	}
+
+	free(reader);
+	return 0;
 }
+
+__declspec(dllexport) BOOLEAN destroyTtlReader(PTTL_READER reader) {
+	if (reader == 0) {
+		error("null");
+		return FALSE;
+	}
+	WinDivertShutdown(reader->windivert, WINDIVERT_SHUTDOWN_RECV);
+	return TRUE;
+}
+
+__declspec(dllexport) INT32 getTtl(PTTL_READER reader) {
+	if (reader == 0) {
+		error("null");
+		return -1;
+	}
+	return reader->latency;
+}
+
 __declspec(dllexport) UINT32 redirect_get_active_connections_count(PREDIRECT r) {
 	if (r == NULL) {
 		error("null");
@@ -2878,24 +2935,24 @@ err:
 	return 0;
 }
 
-DWORD WINAPI getLatency_thread(LPVOID lpParam)
+DWORD WINAPI latency_read_thread(LPVOID lpParam)
 {
-	HANDLE handle = (HANDLE)lpParam;
-	unsigned char* packet = malloc(MAXBUF);
+	PLATENCY_READER reader = (PLATENCY_READER)lpParam;
+	HANDLE handle = reader->windivert;
+	char* packet = reader->packet;
 	UINT packet_len;
 	WINDIVERT_ADDRESS addr;
 	PWINDIVERT_IPHDR ip_header;
 	PWINDIVERT_TCPHDR tcp_header;
 	UINT32 look_seq = 0;
 	UINT64 time = 0;
-	DWORD result = 0xFFFFFFFF;
 	while (TRUE)
 	{
 		if (!WinDivertRecv(handle, packet, MAXBUF, &packet_len, &addr))
 		{
 			DWORD err = GetLastError();
 			if (err == ERROR_NO_DATA) {
-				debug("latency_thread closed by shutdown");
+				debug("latency_read_thread closed by shutdown");
 				break;
 			}
 			//if (err == ERROR_INVALID_HANDLE) {
@@ -2924,8 +2981,7 @@ DWORD WINAPI getLatency_thread(LPVOID lpParam)
 			if (tcp_header->Ack) {
 				UINT32 AckNum = ntohl(tcp_header->AckNum);
 				if (AckNum == look_seq) {
-					result = currentTimeMillis() - time;
-					break;
+					reader->latency = currentTimeMillis() - time;
 				}
 				if (AckNum >= look_seq) {
 					look_seq = 0;
@@ -2933,12 +2989,20 @@ DWORD WINAPI getLatency_thread(LPVOID lpParam)
 			}
 		}
 	}
-	free(packet);
-	return result;
+	WinDivertShutdown(handle, WINDIVERT_SHUTDOWN_BOTH);
+	WinDivertClose(handle);
+	free(reader->packet);
+	CloseHandle(reader->thread_in);
+	free(reader);
+	return 0;
 }
 
-__declspec(dllexport) INT32 getLatency(char* fromIp, UINT16 fromPort, char* toIp, UINT16 toPort) {
+__declspec(dllexport) PLATENCY_READER createLatencyReader(char* fromIp, UINT16 fromPort, char* toIp, UINT16 toPort) {
 
+	PLATENCY_READER reader = calloc(1, sizeof(LATENCY_READER));
+	if (reader == 0) {
+		return 0;
+	}
 	char filter[256];
 	if (fromIp == 0) {
 		snprintf(filter, sizeof(filter),
@@ -2958,24 +3022,58 @@ __declspec(dllexport) INT32 getLatency(char* fromIp, UINT16 fromPort, char* toIp
 	}
 	HANDLE handle = WinDivertOpen(filter, WINDIVERT_LAYER_NETWORK, 0, WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY);
 	if (handle == 0 || handle == INVALID_HANDLE_VALUE) {
-		return -1;
+		goto err;
 	}
-	INT32 result = -1;
+	reader->windivert = handle;
 
-	HANDLE thread = CreateThread(NULL, 100 * 1024, getLatency_thread, handle, 0, 0);
+	unsigned char* packet = malloc(MAXBUF);
+	if (packet == 0) {
+		goto err;
+	}
+	reader->packet = packet;
+	INT32 result = -1;
+	HANDLE thread = CreateThread(NULL, 100 * 1024, latency_read_thread, reader, 0, 0);
 	if (thread == 0) {
+		goto err;
+	}
+	reader->thread_in = handle;
+	return reader;
+
+err:
+
+
+	if (reader->windivert != 0) {
+		WinDivertShutdown(reader->windivert, WINDIVERT_SHUTDOWN_BOTH);
+		WinDivertClose(reader->windivert);
+		reader->windivert = 0;
+	}
+	if (reader->packet != 0) {
+		free(reader->packet);
+		reader->packet = 0;
+	}
+	if (reader->thread_in != 0) {
+		CloseHandle(reader->thread_in);
+		reader->thread_in = 0;
+	}
+
+	free(reader);
+	return 0;
+}
+__declspec(dllexport) BOOLEAN destroyLatencyReader(PLATENCY_READER reader) {
+	if (reader == 0) {
+		error("null");
+		return FALSE;
+	}
+	WinDivertShutdown(reader->windivert, WINDIVERT_SHUTDOWN_RECV);
+	return TRUE;
+}
+
+__declspec(dllexport) INT32 getLatency(PLATENCY_READER reader) {
+	if (reader == 0) {
+		error("null");
 		return -1;
 	}
-	WaitForSingleObject(thread, 1000);
-	WinDivertShutdown(handle, WINDIVERT_SHUTDOWN_BOTH);
-	WaitForSingleObject(thread, INFINITE);
-	WinDivertClose(handle);
-	DWORD exitCode = 0;
-	if (GetExitCodeThread(thread, &exitCode)) {
-		result = exitCode;
-	}
-	CloseHandle(thread);
-	return result;
+	return reader->latency;
 }
 
 DWORD WINAPI block_ip_thread(LPVOID lpParam)
@@ -3150,26 +3248,42 @@ JNIEXPORT jint JNICALL Java_net_java_faker_WinRedirect_redirectGetDefaultLatency
 	return redirect_get_default_latency(redirect);
 }
 
-JNIEXPORT jint JNICALL Java_net_java_faker_WinRedirect_getLatency(JNIEnv* env, jclass cl, jstring jfromIp, jint fromPort, jstring jtoIp, jint toPort) {
+JNIEXPORT jlong JNICALL Java_net_java_faker_WinRedirect_createLatencyReader(JNIEnv* env, jclass cl, jstring jfromIp, jint fromPort, jstring jtoIp, jint toPort) {
 	char* fromIp = jfromIp == 0 ? 0 : (*env)->GetStringUTFChars(env, jfromIp, 0);
 	char* toIp = (*env)->GetStringUTFChars(env, jtoIp, 0);
-	INT32 result = getLatency(fromIp, fromPort, toIp, toPort);
+	jlong reader = createLatencyReader(fromIp, fromPort, toIp, toPort);
 	if (fromIp != 0) {
 		(*env)->ReleaseStringUTFChars(env, jfromIp, fromIp);
 	}
 	(*env)->ReleaseStringUTFChars(env, jtoIp, toIp);
-	return result;
+	return reader;
 }
 
-JNIEXPORT jint JNICALL Java_net_java_faker_WinRedirect_getTtl(JNIEnv* env, jclass cl, jstring jfromIp, jint fromPort, jstring jtoIp, jint toPort) {
+JNIEXPORT jboolean JNICALL Java_net_java_faker_WinRedirect_destroyLatencyReader(JNIEnv* env, jclass cl, jlong reader) {
+	return destroyLatencyReader(reader);
+}
+
+JNIEXPORT jint JNICALL Java_net_java_faker_WinRedirect_getLatency(JNIEnv* env, jclass cl, jlong reader) {
+	return getLatency(reader);;
+}
+
+JNIEXPORT jlong JNICALL Java_net_java_faker_WinRedirect_createTtlReader(JNIEnv* env, jclass cl, jstring jfromIp, jint fromPort, jstring jtoIp, jint toPort) {
 	char* fromIp = (*env)->GetStringUTFChars(env, jfromIp, 0);
 	char* toIp = jtoIp == 0 ? 0 : (*env)->GetStringUTFChars(env, jtoIp, 0);
-	INT32 result = get_connection_ttl(fromIp, fromPort, toIp, toPort);
+	jlong reader = createTtlReader(fromIp, fromPort, toIp, toPort);
 	if (fromIp != 0) {
 		(*env)->ReleaseStringUTFChars(env, jfromIp, fromIp);
 	}
 	(*env)->ReleaseStringUTFChars(env, jtoIp, toIp);
-	return result;
+	return reader;
+}
+
+JNIEXPORT jboolean JNICALL Java_net_java_faker_WinRedirect_destroyTtlReader(JNIEnv* env, jclass cl, jlong reader) {
+	return destroyTtlReader(reader);
+}
+
+JNIEXPORT jint JNICALL Java_net_java_faker_WinRedirect_getTtl(JNIEnv* env, jclass cl, jlong reader) {
+	return getTtl(reader);
 }
 
 JNIEXPORT jint JNICALL Java_net_java_faker_WinRedirect_getRedirectLatency(JNIEnv* env, jclass cl, jlong redirect, jstring jip, jint port) {

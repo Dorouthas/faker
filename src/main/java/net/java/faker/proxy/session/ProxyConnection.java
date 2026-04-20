@@ -34,14 +34,18 @@ import net.java.faker.proxy.packet.pingpong.C2SAbstractPong;
 import net.java.faker.proxy.packethandler.PacketHandler;
 import net.java.faker.proxy.util.CloseAndReturn;
 import net.java.faker.proxy.util.LatencyMode;
+import net.java.faker.proxy.util.PacketLogger;
 import net.java.faker.proxy.util.PacketUtils;
 import net.java.faker.util.logging.Logger;
 import net.lenni0451.mcstructs.text.components.StringComponent;
 import net.raphimc.netminecraft.constants.ConnectionState;
+import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.constants.MCPipeline;
+import net.raphimc.netminecraft.constants.PacketDirection;
 import net.raphimc.netminecraft.netty.connection.NetClient;
 import net.raphimc.netminecraft.netty.crypto.AESEncryption;
 import net.raphimc.netminecraft.packet.Packet;
+import net.raphimc.netminecraft.packet.UnknownPacket;
 import net.raphimc.netminecraft.packet.impl.configuration.S2CConfigDisconnectPacket;
 import net.raphimc.netminecraft.packet.impl.login.C2SLoginHelloPacket;
 import net.raphimc.netminecraft.packet.impl.login.S2CLoginDisconnectPacket;
@@ -326,6 +330,15 @@ public class ProxyConnection extends NetClient {
     }
 
     private ChannelFuture sendServer(Object msg) {
+        if (msg instanceof Packet packet) {
+            if (packet instanceof UnknownPacket p) {
+                PacketRegistry reg = (PacketRegistry) getChannel().attr(MCPipeline.PACKET_REGISTRY_ATTRIBUTE_KEY).get();
+                final MCPackets packetType = MCPackets.getPacket(reg.getConnectionState(), PacketDirection.SERVERBOUND, reg.getProtocolVersion(), p.packetId);
+                PacketLogger.logOut("Unknown " + p.packetId + " " + packetType);
+            } else {
+                PacketLogger.logOut(PacketUtils.toString(packet));
+            }
+        }
         return getChannel().writeAndFlush(msg);
     }
 

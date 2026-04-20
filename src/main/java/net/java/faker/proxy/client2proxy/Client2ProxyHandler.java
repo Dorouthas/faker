@@ -28,6 +28,7 @@ import io.netty.util.AttributeKey;
 import net.java.faker.Proxy;
 import net.java.faker.WinRedirect;
 import net.java.faker.auth.Account;
+import net.java.faker.proxy.PacketRegistry;
 import net.java.faker.proxy.event.ConnectEvent;
 import net.java.faker.proxy.event.DisconnectEvent;
 import net.java.faker.proxy.event.LoginEvent;
@@ -38,9 +39,7 @@ import net.java.faker.proxy.session.DualConnection;
 import net.java.faker.proxy.session.ProxyConnection;
 import net.java.faker.proxy.util.*;
 import net.java.faker.util.logging.Logger;
-import net.raphimc.netminecraft.constants.ConnectionState;
-import net.raphimc.netminecraft.constants.IntendedState;
-import net.raphimc.netminecraft.constants.MCVersion;
+import net.raphimc.netminecraft.constants.*;
 import net.raphimc.netminecraft.packet.Packet;
 import net.raphimc.netminecraft.packet.UnknownPacket;
 import net.raphimc.netminecraft.packet.impl.handshaking.C2SHandshakingClientIntentionPacket;
@@ -477,6 +476,7 @@ public class Client2ProxyHandler extends SimpleChannelInboundHandler<Packet> {
                                 //will be restored in LoginPacketHandler
                                 ChannelUtil.disableAutoRead(this.proxyConnection.getChannel());
                             }
+                            PacketLogger.start();
                         }
                     });
                 });

@@ -46,6 +46,7 @@ public class Config {
     public final BooleanValue allowDirectConnection = registerBoolean("AllowDirectConnection").defaultValue(false);
     public final BooleanValue autoLatency = registerBoolean("AutoLatency").defaultValue(false);
     public final BooleanValue newPingCorrection = registerBoolean("NewPingCorrection").defaultValue(false);
+    public final BooleanValue logPackets = registerBoolean("LogPackets").defaultValue(true);
     public final StringValue locale = registerString("Locale");
     public final StringValue targetAdapter = registerString("TargetAdapter");
     public final StringValue dhcp_interface = registerString("DHCP_interface");

@@ -423,6 +423,7 @@ public class GeneralTab extends UITab {
             this.window.advancedTab.autoLatency.setEnabled(state);
             this.window.advancedTab.newPingCorrection.setEnabled(state);
             this.window.advancedTab.updateNetworkAdapterEnabled(null);
+            this.window.advancedTab.logPackets.setEnabled(state);
         }
     }
 

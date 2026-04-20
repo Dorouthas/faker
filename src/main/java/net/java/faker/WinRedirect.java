@@ -89,9 +89,17 @@ public class WinRedirect {
 
     public static native int getRedirectLatency(long redirect, String ip, int port);
 
-    public static native int getLatency(String fromIp, int fromPort, String toIp, int toPort);
+    public static native long createLatencyReader(String fromIp, int fromPort, String toIp, int toPort);
 
-    public static native int getTtl(String fromIp, int fromPort, String toIp, int toPort);
+    public static native boolean destroyLatencyReader(long reader);
+
+    public static native int getLatency(long reader);
+
+    public static native long createTtlReader(String fromIp, int fromPort, String toIp, int toPort);
+
+    public static native boolean destroyTtlReader(long reader);
+
+    public static native int getTtl(long reader);
 
     public static native boolean setTtlPaththrough(long redirect, int ttl);
 

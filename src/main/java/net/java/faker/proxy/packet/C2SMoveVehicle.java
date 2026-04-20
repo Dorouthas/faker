@@ -19,6 +19,7 @@
 package net.java.faker.proxy.packet;
 
 import io.netty.buffer.ByteBuf;
+import net.raphimc.netminecraft.constants.MCVersion;
 import net.raphimc.netminecraft.packet.Packet;
 
 public class C2SMoveVehicle implements Packet {
@@ -27,6 +28,7 @@ public class C2SMoveVehicle implements Packet {
     public double z;
     public float yaw;
     public float pitch;
+    public boolean onGround;
 
     @Override
     public void read(ByteBuf byteBuf, int protocolVersion) {
@@ -35,6 +37,9 @@ public class C2SMoveVehicle implements Packet {
         this.z = byteBuf.readDouble();
         this.yaw = byteBuf.readFloat();
         this.pitch = byteBuf.readFloat();
+        if (protocolVersion >= MCVersion.v1_21_4) {
+            this.onGround = byteBuf.readBoolean();
+        }
     }
 
     @Override
@@ -44,5 +49,8 @@ public class C2SMoveVehicle implements Packet {
         byteBuf.writeDouble(this.z);
         byteBuf.writeFloat(this.yaw);
         byteBuf.writeFloat(this.pitch);
+        if (protocolVersion >= MCVersion.v1_21_4) {
+            byteBuf.writeBoolean(this.onGround);
+        }
     }
 }
